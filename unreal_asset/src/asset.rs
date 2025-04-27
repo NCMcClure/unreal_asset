@@ -356,6 +356,8 @@ pub struct Asset<C: Read + Seek> {
     pub asset_data: AssetData<PackageIndex>,
     /// Legacy file version
     pub legacy_file_version: i32,
+    /// File path (for error reporting)
+    file_path: String,
 
     // imports
     // exports
@@ -479,6 +481,7 @@ impl<'a, C: Read + Seek> Asset<C> {
                 ..Default::default()
             },
             legacy_file_version: 0,
+            file_path: String::new(),
             generations: Vec::new(),
             package_guid: Guid::default(),
             engine_version_recorded: FEngineVersion::unknown(),
@@ -522,6 +525,12 @@ impl<'a, C: Read + Seek> Asset<C> {
         asset.parse_data()?;
         Ok(asset)
     }
+    
+    /// Set the file path for error reporting
+    pub fn with_path(mut self, path: impl Into<String>) -> Self {
+        self.file_path = path.into();
+        self
+    }
 
     /// Set asset engine version
     fn set_engine_version(&mut self, engine_version: EngineVersion) {
@@ -539,9 +548,12 @@ impl<'a, C: Read + Seek> Asset<C> {
 
         // read and check magic
         if self.read_u32::<BE>()? != UE4_ASSET_MAGIC {
-            return Err(Error::invalid_file(
-                "File is not a valid uasset file".to_string(),
-            ));
+            let error_msg = if self.file_path.is_empty() {
+                "File is not a valid uasset file".to_string()
+            } else {
+                format!("File '{}' is not a valid uasset file", self.file_path)
+            };
+            return Err(Error::invalid_file(error_msg));
         }
 
         // read legacy version
