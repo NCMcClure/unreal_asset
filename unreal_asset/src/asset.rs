@@ -3,6 +3,7 @@
 use std::fmt::{Debug, Formatter};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::mem::size_of;
+use std::path::PathBuf;
 
 use byteorder::{ReadBytesExt, WriteBytesExt, BE, LE};
 
@@ -349,6 +350,9 @@ pub struct Asset<C: Read + Seek> {
     /// Raw reader
     #[container_ignore]
     pub raw_reader: RawReader<PackageIndex, C>,
+    /// Asset path
+    #[container_ignore]
+    pub path: Option<PathBuf>,
     // parsed data
     /// Asset info
     pub info: String,
@@ -453,11 +457,12 @@ pub struct Asset<C: Read + Seek> {
 
 impl<'a, C: Read + Seek> Asset<C> {
     /// Create an asset from a binary file
-    pub fn new(
+    pub fn new<P: Into<PathBuf>>(
         asset_data: C,
         bulk_data: Option<C>,
         engine_version: EngineVersion,
         mappings: Option<Usmap>,
+        asset_path: Option<P>,
     ) -> Result<Self, Error> {
         let use_event_driven_loader = bulk_data.is_some();
 
@@ -474,6 +479,7 @@ impl<'a, C: Read + Seek> Asset<C> {
         let mut asset = Asset {
             raw_reader,
             info: String::from("Serialized with unrealmodding/uasset"),
+            path: asset_path.map(|p| p.into()),
             asset_data: AssetData {
                 use_event_driven_loader,
                 ..Default::default()
@@ -539,8 +545,9 @@ impl<'a, C: Read + Seek> Asset<C> {
 
         // read and check magic
         if self.read_u32::<BE>()? != UE4_ASSET_MAGIC {
+            let path_str = self.path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "<unknown>".to_string());
             return Err(Error::invalid_file(
-                "File is not a valid uasset file".to_string(),
+                format!("File {} is not a valid uasset file", path_str)
             ));
         }
 
@@ -1638,6 +1645,7 @@ impl<C: Read + Seek> Debug for Asset<C> {
             .field("world_tile_info_data_offset", &self.world_tile_info_offset)
             .field("preload_dependency_count", &self.preload_dependency_count)
             .field("preload_dependency_offset", &self.preload_dependency_offset)
+            .field("path", &self.path)
             .finish()
     }
 }
